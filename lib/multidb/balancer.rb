@@ -1,7 +1,8 @@
 module Multidb
 
   class Candidate
-    def initialize(target)
+    def initialize(name, target)
+      @name = name
       if target.is_a?(Hash)
         adapter = target[:adapter]
         begin
@@ -14,8 +15,14 @@ module Multidb
         else
           spec_class = ActiveRecord::Base::ConnectionSpecification
         end
-        @connection_pool = ActiveRecord::ConnectionAdapters::ConnectionPool.new(
-          spec_class.new(target, "#{adapter}_connection"))
+        if ActiveRecord::VERSION::MAJOR >= 5
+          # ActiveRecord 5.0.1 introduced `name` to initialize, see https://github.com/rails/rails/pull/24844/files
+          @connection_pool = ActiveRecord::ConnectionAdapters::ConnectionPool.new(
+            spec_class.new(name, target, "#{adapter}_connection"))
+        else
+          @connection_pool = ActiveRecord::ConnectionAdapters::ConnectionPool.new(
+            spec_class.new(target, "#{adapter}_connection"))
+        end
       else
         @connection_pool = target
       end
@@ -29,7 +36,7 @@ module Multidb
       end
     end
 
-    attr_reader :connection_pool
+    attr_reader :connection_pool, :name
   end
 
   class Balancer
@@ -42,11 +49,11 @@ module Multidb
           configs = config.is_a?(Array) ? config : [config]
           configs.each do |config|
             config = config || {}
-            if config["alias"]
-              @candidates[name] = @candidates[config["alias"]]
+            if config['alias']
+              @candidates[name] = @candidates[config['alias']]
               next
             end
-            candidate = Candidate.new(@configuration.default_adapter.merge(config))
+            candidate = Candidate.new(name,@configuration.default_adapter.merge(config))
             @candidates[name] ||= []
             @candidates[name].push(candidate)
           end
@@ -58,7 +65,7 @@ module Multidb
         else
           @fallback = false
         end
-        @default_candidate = Candidate.new(@configuration.default_pool)
+        @default_candidate = Candidate.new('default', @configuration.default_pool)
         unless @candidates.include?(:default)
           @candidates[:default] = [@default_candidate]
         end
