@@ -62,6 +62,8 @@ module Multidb
           @fallback = @configuration.raw_configuration[:fallback]
         elsif defined?(Rails)
           @fallback = %w(development test).include?(Rails.env)
+        elsif ENV['RAILS_ENV'].present?
+          @fallback = %w(development test).include?(ENV['RAILS_ENV'])
         else
           @fallback = false
         end
